@@ -3,6 +3,9 @@ Libgdx lighting example via two different modes:
 1. Via tiles in a tilemap to create hard shading
 2. Via a small pixmap (-> texture) which uses blending to create smooth shading
 
+### Html Example: https://lyze237.github.io/LibgdxTiledLightingExample/
+
+
 This example is based on:
 https://gamedev.stackexchange.com/questions/126078/how-can-i-implement-smooth-tile-based-lighting
 
