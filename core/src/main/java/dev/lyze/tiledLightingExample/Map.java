@@ -21,11 +21,19 @@ public class Map {
 
     private Texture lightingTexture;
 
+    private final int maxCaveHeight;
+
     public Map(String path) {
-        this(new InternalFileHandleResolver(), path);
+        this(path, 5);
     }
 
-    public Map(FileHandleResolver resolver, String path) {
+    public Map(String path, int maxCaveHeight) {
+        this(new InternalFileHandleResolver(), path, maxCaveHeight);
+    }
+
+    public Map(FileHandleResolver resolver, String path, int maxCaveHeight) {
+        this.maxCaveHeight = maxCaveHeight;
+
         map = new TmxMapLoader(resolver).load(path);
         mapLayer = (TiledMapTileLayer) map.getLayers().get("Map");
 
@@ -55,7 +63,7 @@ public class Map {
         for (int invY = 0; invY <= lightingLayer.getHeight(); invY++) {
             int y = lightingLayer.getHeight() - invY;
             for (int x = 0; x <= lightingLayer.getWidth(); x++) {
-                if (mapLayer.getCell(x, y) == null) {
+                if (y > maxCaveHeight && mapLayer.getCell(x, y) == null) {
                     System.out.print("  ");
                     continue;
                 }
@@ -67,12 +75,14 @@ public class Map {
 
                 // since the average generates floats from 0.0 to 0.1 in steps of 0.1 (e.g. 0.1XXXX, 0.2XXXX, 0.3XXXX) we can clamp it and figure out the index via that
                 int index = (int) (average * 10);
+                System.out.print(index + " ");
 
                 // create the cell with the appropriately tinted tile
                 TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
                 cell.setTile(tiles.get(index));
                 lightingLayer.setCell(x, y, cell);
             }
+            System.out.println();
         }
 
         // generate the texture based on the generated pixmap
@@ -94,6 +104,8 @@ public class Map {
                 if (dX < 0 || dY < 0 || dX >= layer.getWidth() || dY >= layer.getHeight())
                     foundTile = true; // out of bounds
                 else if (layer.getCell(dX, dY) != null)
+                    foundTile = true;
+                else if (y <= maxCaveHeight)
                     foundTile = true;
 
                 averageSum += foundTile ? 1 : 0;

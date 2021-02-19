@@ -29,7 +29,7 @@ public class Main extends ApplicationAdapter {
 
         map = new Map("Map.tmx");
 
-        this.gameViewport = new ExtendViewport(32, 19);
+        this.gameViewport = new ExtendViewport(map.getWidth(), map.getHeight());
         this.ui = new Stage(new ExtendViewport(1280, 720));
 
         initUi();
