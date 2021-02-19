@@ -6,6 +6,9 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.maps.tiled.*;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 
@@ -17,78 +20,93 @@ public class Map {
     private final OrthogonalTiledMapRenderer renderer;
 
     private final TiledMapTileLayer mapLayer;
-    private TiledMapTileLayer lightingLayer;
+    private final TiledMapTileLayer lightingLayer;
+    private final ArrayList<TiledMapTile> lightingTiles;
 
-    private Texture lightingTexture;
+    private final Texture pixel;
+    private final SpriteBatch lightingBatch;
+    private final FrameBuffer lightingFrameBuffer;
+    private final TextureRegion lightingTexture;
 
     private final int maxCaveHeight;
+    private final int lightingTickSpeed;
+
+    private int currentLightingCoordinate = 0;
 
     public Map(String path) {
-        this(path, 5);
+        this(path, 4, 10);
     }
 
-    public Map(String path, int maxCaveHeight) {
-        this(new InternalFileHandleResolver(), path, maxCaveHeight);
+    public Map(String path, int maxCaveHeight, int lightingTickSpeed) {
+        this(new InternalFileHandleResolver(), path, maxCaveHeight, lightingTickSpeed);
     }
 
-    public Map(FileHandleResolver resolver, String path, int maxCaveHeight) {
+    public Map(FileHandleResolver resolver, String path, int maxCaveHeight, int lightingTickSpeed) {
         this.maxCaveHeight = maxCaveHeight;
+        this.lightingTickSpeed = lightingTickSpeed;
 
         map = new TmxMapLoader(resolver).load(path);
         mapLayer = (TiledMapTileLayer) map.getLayers().get("Map");
 
         renderer = new OrthogonalTiledMapRenderer(map, 1f / mapLayer.getTileWidth());
 
-        generateLightingLayer();
+        pixel = generatePixel();
+        lightingBatch = new SpriteBatch();
+        lightingBatch.getProjectionMatrix().setToOrtho2D(0, 0, mapLayer.getWidth(), mapLayer.getHeight());
+        lightingFrameBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, mapLayer.getWidth(), mapLayer.getHeight(), false);
+        lightingTexture = new TextureRegion(lightingFrameBuffer.getColorBufferTexture());
+        lightingTexture.flip(false, true);
+
+        lightingLayer = new TiledMapTileLayer(mapLayer.getWidth(), mapLayer.getHeight(), mapLayer.getTileWidth(), mapLayer.getTileHeight());
+        lightingTiles = generateLightingTiles(map.getTileSets().getTileSet("Lighting"));
+        map.getLayers().add(lightingLayer);
 
         lightingLayer.setVisible(false);
+    }
+
+    // might be better to load a texture instead of creating one
+    private Texture generatePixel() {
+        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        pixmap.setColor(Color.WHITE);
+        pixmap.fill();
+        return new Texture(pixmap);
+    }
+
+    // generate lighting during every frame for a certain amount of tiles to not overload the gpu. (=> basically "async")
+    public void update() {
+        lightingFrameBuffer.begin();
+        lightingBatch.begin();
+
+        for (int i = 0; i < lightingTickSpeed && currentLightingCoordinate < lightingLayer.getWidth() * lightingLayer.getHeight(); i++, currentLightingCoordinate++) {
+            int x = currentLightingCoordinate / lightingLayer.getHeight();
+            int invY = currentLightingCoordinate % lightingLayer.getHeight();
+            int y = lightingLayer.getHeight() - 1 - invY;
+
+            if (y > maxCaveHeight && mapLayer.getCell(x, y) == null) {
+                continue;
+            }
+
+            float average = calculateAverageLightingOfTile(mapLayer, x, y);
+
+            lightingBatch.setColor(new Color(0, 0, 0, average));
+            lightingBatch.draw(pixel, x, y);
+
+            // since the average generates floats from 0.0 to 0.1 in steps of 0.1 (e.g. 0.1XXXX, 0.2XXXX, 0.3XXXX) we can clamp it and figure out the index via that
+            int index = (int) (average * 10);
+
+            // create the cell with the appropriately tinted tile
+            TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
+            cell.setTile(lightingTiles.get(index));
+            lightingLayer.setCell(x, y, cell);
+        }
+
+        lightingBatch.end();
+        lightingFrameBuffer.end();
     }
 
     public void render(OrthographicCamera camera) {
         renderer.setView(camera);
         renderer.render();
-    }
-
-    private void generateLightingLayer() {
-        lightingLayer = new TiledMapTileLayer(mapLayer.getWidth(), mapLayer.getHeight(), mapLayer.getTileWidth(), mapLayer.getTileHeight());
-        map.getLayers().add(lightingLayer);
-
-        setupLighting(generateLightingTiles(map.getTileSets().getTileSet("Lighting")));
-    }
-
-    private void setupLighting(ArrayList<TiledMapTile> tiles) {
-        Pixmap lightingPixmap = new Pixmap(lightingLayer.getWidth(), lightingLayer.getHeight(), Pixmap.Format.RGBA8888);
-        lightingPixmap.setFilter(Pixmap.Filter.BiLinear);
-
-        for (int invY = 0; invY <= lightingLayer.getHeight(); invY++) {
-            int y = lightingLayer.getHeight() - invY;
-            for (int x = 0; x <= lightingLayer.getWidth(); x++) {
-                if (y > maxCaveHeight && mapLayer.getCell(x, y) == null) {
-                    System.out.print("  ");
-                    continue;
-                }
-
-                float average = calculateAverageLightingOfTile(mapLayer, x, y);
-
-                lightingPixmap.setColor(new Color(0, 0, 0, average));
-                lightingPixmap.drawPixel(x, y);
-
-                // since the average generates floats from 0.0 to 0.1 in steps of 0.1 (e.g. 0.1XXXX, 0.2XXXX, 0.3XXXX) we can clamp it and figure out the index via that
-                int index = (int) (average * 10);
-                System.out.print(index + " ");
-
-                // create the cell with the appropriately tinted tile
-                TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
-                cell.setTile(tiles.get(index));
-                lightingLayer.setCell(x, y, cell);
-            }
-            System.out.println();
-        }
-
-        // generate the texture based on the generated pixmap
-        lightingTexture = new Texture(lightingPixmap);
-        // important part: set it to linear for "smoothness"
-        lightingTexture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
     }
 
     // calculates lighting average for this one specific tile according to https://gamedev.stackexchange.com/a/126165
@@ -125,7 +143,7 @@ public class Map {
         return tiles;
     }
 
-    public Texture getLightingTexture() {
+    public TextureRegion getLightingTexture() {
         return lightingTexture;
     }
 
@@ -143,6 +161,10 @@ public class Map {
 
     public int getHeight() {
         return lightingLayer.getHeight();
+    }
+
+    public void restartLightingGeneration() {
+        currentLightingCoordinate = 0;
     }
 }
 

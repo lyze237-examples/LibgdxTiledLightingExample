@@ -61,6 +61,7 @@ public class Main extends ApplicationAdapter {
 
         // render map
         gameViewport.apply();
+        map.update();
         map.render((OrthographicCamera) gameViewport.getCamera());
 
         // render pixmap/texture
@@ -69,7 +70,7 @@ public class Main extends ApplicationAdapter {
             batch.setProjectionMatrix(gameViewport.getCamera().combined);
             batch.begin();
             // texture is flipped, so let's unflip it here
-            batch.draw(map.getLightingTexture(), 0, map.getHeight(), map.getWidth(), -map.getHeight());
+            batch.draw(map.getLightingTexture(), 0, 0, map.getWidth(), map.getHeight());
             batch.end();
         }
 
