@@ -41,6 +41,9 @@ public class Main extends ApplicationAdapter {
 
         VisTable root = new VisTable();
         root.setFillParent(true);
+
+        VisTable buttonbar = new VisTable();
+
         VisTextButton changeModeButton = new VisTextButton("Change Lighting to Tilemap Layer");
         changeModeButton.addListener(new ClickListener() {
             @Override
@@ -49,8 +52,18 @@ public class Main extends ApplicationAdapter {
                 map.toggleLightingLayerVisibility();
             }
         });
-        root.add(changeModeButton).top().left().padTop(8).padLeft(8).expand();
+        buttonbar.add(changeModeButton);
 
+        VisTextButton restartLightGenerationButton = new VisTextButton("Restart Light generation");
+        restartLightGenerationButton.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                map.restartLightingGeneration();
+            }
+        });
+        buttonbar.add(restartLightGenerationButton).padLeft(12);
+
+        root.add(buttonbar).top().left().expand().padTop(8).padLeft(8);
         ui.addActor(root);
     }
 

@@ -1,11 +1,9 @@
 package dev.lyze.tiledLightingExample;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.assets.loaders.FileHandleResolver;
 import com.badlogic.gdx.assets.loaders.resolvers.InternalFileHandleResolver;
-import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Pixmap;
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.*;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
@@ -20,7 +18,7 @@ public class Map {
     private final OrthogonalTiledMapRenderer renderer;
 
     private final TiledMapTileLayer mapLayer;
-    private final TiledMapTileLayer lightingLayer;
+    private TiledMapTileLayer lightingLayer;
     private final ArrayList<TiledMapTile> lightingTiles;
 
     private final Texture pixel;
@@ -57,11 +55,15 @@ public class Map {
         lightingTexture = new TextureRegion(lightingFrameBuffer.getColorBufferTexture());
         lightingTexture.flip(false, true);
 
-        lightingLayer = new TiledMapTileLayer(mapLayer.getWidth(), mapLayer.getHeight(), mapLayer.getTileWidth(), mapLayer.getTileHeight());
         lightingTiles = generateLightingTiles(map.getTileSets().getTileSet("Lighting"));
-        map.getLayers().add(lightingLayer);
 
+        setupLightingLayer();
         lightingLayer.setVisible(false);
+    }
+
+    private void setupLightingLayer() {
+        lightingLayer = new TiledMapTileLayer(mapLayer.getWidth(), mapLayer.getHeight(), mapLayer.getTileWidth(), mapLayer.getTileHeight());
+        map.getLayers().add(lightingLayer);
     }
 
     // might be better to load a texture instead of creating one
@@ -164,6 +166,20 @@ public class Map {
     }
 
     public void restartLightingGeneration() {
+        // destroy the lighting layer and create a new one
+        // also remember if the layer was visible or not
+        boolean wasLightingLayerVisible = lightingLayer.isVisible();
+        map.getLayers().remove(lightingLayer);
+        setupLightingLayer();
+        lightingLayer.setVisible(wasLightingLayerVisible);
+
+        // clear the framebuffer with transparent
+        lightingFrameBuffer.begin();
+        Gdx.gl.glClearColor(0, 0, 0, 0);
+        Gdx.gl.glClear(GL30.GL_COLOR_BUFFER_BIT);
+        lightingFrameBuffer.end();
+
+        // reset "async" coordinate
         currentLightingCoordinate = 0;
     }
 }
