@@ -1,6 +1,7 @@
 package dev.lyze.tiledLightingExample;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.assets.loaders.FileHandleResolver;
 import com.badlogic.gdx.assets.loaders.resolvers.InternalFileHandleResolver;
 import com.badlogic.gdx.graphics.*;
@@ -9,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.maps.tiled.*;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
+import com.badlogic.gdx.math.Vector3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,6 +33,8 @@ public class Map {
 
     private int currentLightingCoordinate = 0;
 
+    private final Vector3 mouseCoordinateVector = new Vector3();
+
     public Map(String path) {
         this(path, 4, 10);
     }
@@ -49,9 +53,13 @@ public class Map {
         renderer = new OrthogonalTiledMapRenderer(map, 1f / mapLayer.getTileWidth());
 
         pixel = generatePixel();
+
         lightingBatch = new SpriteBatch();
+        lightingBatch.disableBlending();
         lightingBatch.getProjectionMatrix().setToOrtho2D(0, 0, mapLayer.getWidth(), mapLayer.getHeight());
+
         lightingFrameBuffer = new FrameBuffer(Pixmap.Format.RGBA8888, mapLayer.getWidth(), mapLayer.getHeight(), false);
+
         lightingTexture = new TextureRegion(lightingFrameBuffer.getColorBufferTexture());
         lightingTexture.flip(false, true);
 
@@ -107,6 +115,14 @@ public class Map {
     }
 
     public void render(OrthographicCamera camera) {
+        // left click destroys tiles
+        if (Gdx.input.isButtonPressed(Input.Buttons.LEFT)) {
+            mouseCoordinateVector.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            camera.unproject(mouseCoordinateVector);
+
+            mapLayer.setCell((int) mouseCoordinateVector.x, (int) mouseCoordinateVector.y, null);
+        }
+
         renderer.setView(camera);
         renderer.render();
     }
@@ -165,6 +181,9 @@ public class Map {
         return lightingLayer.getHeight();
     }
 
+    // note: instead of regenerating the whole lighting layer
+    // only update the tiles surrounding the tile you updated
+    // this would increase performance by quite a bit
     public void restartLightingGeneration() {
         // destroy the lighting layer and create a new one
         // also remember if the layer was visible or not
