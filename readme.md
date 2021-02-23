@@ -5,6 +5,8 @@ Libgdx lighting example via two different modes:
 
 ### Html Example: https://lyze237.github.io/LibgdxTiledLightingExample/
 
+Left click to destroy tiles.  
+Right click to add tiles
 
 This example is based on:
 https://gamedev.stackexchange.com/questions/126078/how-can-i-implement-smooth-tile-based-lighting

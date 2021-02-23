@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.maps.tiled.*;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
+import com.badlogic.gdx.maps.tiled.tiles.StaticTiledMapTile;
 import com.badlogic.gdx.math.Vector3;
 
 import java.util.ArrayList;
@@ -24,6 +25,8 @@ public class Map {
     private final ArrayList<TiledMapTile> lightingTiles;
 
     private final Texture pixel;
+    private final StaticTiledMapTile brush;
+
     private final SpriteBatch lightingBatch;
     private final FrameBuffer lightingFrameBuffer;
     private final TextureRegion lightingTexture;
@@ -52,7 +55,9 @@ public class Map {
 
         renderer = new OrthogonalTiledMapRenderer(map, 1f / mapLayer.getTileWidth());
 
-        pixel = generatePixel();
+        pixel = generatePixel(1, 1, Color.WHITE);
+
+        brush = new StaticTiledMapTile(new TextureRegion(generatePixel(mapLayer.getTileWidth(), mapLayer.getTileHeight(), Color.TEAL)));
 
         lightingBatch = new SpriteBatch();
         lightingBatch.disableBlending();
@@ -75,9 +80,9 @@ public class Map {
     }
 
     // might be better to load a texture instead of creating one
-    private Texture generatePixel() {
-        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
-        pixmap.setColor(Color.WHITE);
+    private Texture generatePixel(int width, int height, Color color) {
+        Pixmap pixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
+        pixmap.setColor(color);
         pixmap.fill();
         return new Texture(pixmap);
     }
@@ -92,22 +97,8 @@ public class Map {
             int invY = currentLightingCoordinate % lightingLayer.getHeight();
             int y = lightingLayer.getHeight() - 1 - invY;
 
-            if (y > maxCaveHeight && mapLayer.getCell(x, y) == null) {
-                continue;
-            }
-
-            float average = calculateAverageLightingOfTile(mapLayer, x, y);
-
-            lightingBatch.setColor(new Color(0, 0, 0, average));
-            lightingBatch.draw(pixel, x, y);
-
-            // since the average generates floats from 0.0 to 0.1 in steps of 0.1 (e.g. 0.1XXXX, 0.2XXXX, 0.3XXXX) we can clamp it and figure out the index via that
-            int index = (int) (average * 10);
-
-            // create the cell with the appropriately tinted tile
-            TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
-            cell.setTile(lightingTiles.get(index));
-            lightingLayer.setCell(x, y, cell);
+            if (y <= maxCaveHeight || mapLayer.getCell(x, y) != null)
+                setTileLighting(x, y);
         }
 
         lightingBatch.end();
@@ -115,16 +106,69 @@ public class Map {
     }
 
     public void render(OrthographicCamera camera) {
-        // left click destroys tiles
-        if (Gdx.input.isButtonPressed(Input.Buttons.LEFT)) {
-            mouseCoordinateVector.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-            camera.unproject(mouseCoordinateVector);
-
-            mapLayer.setCell((int) mouseCoordinateVector.x, (int) mouseCoordinateVector.y, null);
-        }
+        processInput(camera);
 
         renderer.setView(camera);
         renderer.render();
+    }
+
+    // left click destroys tiles
+    // right click adds a tile
+    private void processInput(OrthographicCamera camera) {
+        mouseCoordinateVector.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+        camera.unproject(mouseCoordinateVector);
+
+        if (Gdx.input.isButtonPressed(Input.Buttons.LEFT)) {
+            mapLayer.setCell((int) mouseCoordinateVector.x, (int) mouseCoordinateVector.y, null);
+            checkAndRecalculateTileLighting((int) mouseCoordinateVector.x, (int) mouseCoordinateVector.y);
+        }
+        else if (Gdx.input.isButtonPressed(Input.Buttons.RIGHT)) {
+            TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
+            cell.setTile(brush);
+            mapLayer.setCell((int) mouseCoordinateVector.x, (int) mouseCoordinateVector.y, cell);
+            checkAndRecalculateTileLighting((int) mouseCoordinateVector.x, (int) mouseCoordinateVector.y);
+        }
+    }
+
+    public void checkAndRecalculateTileLighting(int x, int y) {
+        lightingFrameBuffer.begin();
+        lightingBatch.begin();
+
+        for (int dY = y - 1; dY <= y + 1; dY++) {
+            for (int dX = x - 1; dX <= x + 1; dX++) {
+                // when map layers cell got removed we need to update the lighting layer as well
+                TiledMapTileLayer.Cell mapCell = mapLayer.getCell(dX, dY);
+                TiledMapTileLayer.Cell lightingCell = lightingLayer.getCell(dX, dY);
+
+                // map is null but lighting is set, get rid of that!
+                if (dY > maxCaveHeight && mapCell == null && lightingCell != null) {
+                    lightingBatch.setColor(new Color(0, 0, 0, 0));
+                    lightingBatch.draw(pixel, dX, dY);
+
+                    lightingLayer.setCell(dX, dY, null);
+                }
+                else if (dY <= maxCaveHeight || mapCell != null) {
+                    setTileLighting(dX, dY);
+                }
+            }
+        }
+        lightingBatch.end();
+        lightingFrameBuffer.end();
+    }
+
+    private void setTileLighting(int x, int y) {
+        float average = calculateAverageLightingOfTile(mapLayer, x, y);
+
+        lightingBatch.setColor(new Color(0, 0, 0, average));
+        lightingBatch.draw(pixel, x, y);
+
+        // since the average generates floats from 0.0 to 0.1 in steps of 0.1 (e.g. 0.1XXXX, 0.2XXXX, 0.3XXXX) we can clamp it and figure out the index via that
+        int index = (int) (average * 10);
+
+        // create the cell with the appropriately tinted tile
+        TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
+        cell.setTile(lightingTiles.get(index));
+        lightingLayer.setCell(x, y, cell);
     }
 
     // calculates lighting average for this one specific tile according to https://gamedev.stackexchange.com/a/126165
