@@ -69,7 +69,6 @@ public class Main extends ApplicationAdapter {
             gameViewport.apply();
             batch.setProjectionMatrix(gameViewport.getCamera().combined);
             batch.begin();
-            // texture is flipped, so let's unflip it here
             batch.draw(map.getLightingTexture(), 0, 0, map.getWidth(), map.getHeight());
             batch.end();
         }
